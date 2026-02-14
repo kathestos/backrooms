@@ -305,7 +305,7 @@ export default function BackroomsGame({ initialSeed }: BackroomsGameProps) {
         <div className="overlay-center">
           <div className="overlay-card">
             <h2>Backrooms Session</h2>
-            <p>Click to lock pointer. Move with W/A/S/D, left-click to throw keyboards, ESC to unlock.</p>
+            <p>Move with W/A/S/D, left-click to throw keyboards, ESC to unlock.</p>
             <div className="button-row" style={{ justifyContent: "center" }}>
               <button className="button" onClick={requestPointerLock} type="button">
                 Enter

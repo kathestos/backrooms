@@ -1,0 +1,36 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model RunSession {
+  id              String           @id @default(cuid())
+  seed            String
+  userAgent       String?
+  startedAt       DateTime         @default(now())
+  finishedAt      DateTime?
+  durationSeconds Float?
+  distanceMeters  Float?
+  avgFps          Float?
+  chunkCount      Int?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  events          RunMetricEvent[]
+}
+
+model RunMetricEvent {
+  id             String     @id @default(cuid())
+  runSessionId   String
+  type           String
+  fps            Float?
+  distanceMeters Float?
+  chunkCount     Int?
+  createdAt      DateTime   @default(now())
+  runSession     RunSession @relation(fields: [runSessionId], references: [id], onDelete: Cascade)
+
+  @@index([runSessionId, createdAt])
+}

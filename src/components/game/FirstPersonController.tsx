@@ -140,8 +140,8 @@ export default function FirstPersonController({
       lookTouchPointRef.current = { x: activeTouch.clientX, y: activeTouch.clientY };
 
       const runtime = useRuntimeStore.getState();
-      const yaw = runtime.yaw - deltaX * mouseSensitivity;
-      const pitch = Math.min(1.45, Math.max(-1.45, runtime.pitch - deltaY * mouseSensitivity));
+      const yaw = runtime.yaw + deltaX * mouseSensitivity;
+      const pitch = Math.min(1.45, Math.max(-1.45, runtime.pitch + deltaY * mouseSensitivity));
       setRotation(yaw, pitch);
       event.preventDefault();
     };

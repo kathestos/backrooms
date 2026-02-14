@@ -14,6 +14,9 @@ interface FirstPersonControllerProps {
   mouseSensitivity: number;
   playerRadius: number;
   eyeHeight: number;
+  mobileControlsEnabled?: boolean;
+  mobileForward?: boolean;
+  mobileBackward?: boolean;
   disabled?: boolean;
 }
 
@@ -30,11 +33,16 @@ export default function FirstPersonController({
   mouseSensitivity,
   playerRadius,
   eyeHeight,
+  mobileControlsEnabled = false,
+  mobileForward = false,
+  mobileBackward = false,
   disabled = false,
 }: FirstPersonControllerProps) {
   const { camera, gl } = useThree();
   const cameraRef = useRef(camera);
   const keysRef = useRef({ w: false, a: false, s: false, d: false });
+  const lookTouchIdRef = useRef<number | null>(null);
+  const lookTouchPointRef = useRef<{ x: number; y: number } | null>(null);
   const forward = useRef(new Vector3());
   const right = useRef(new Vector3());
   const move = useRef(new Vector3());
@@ -84,8 +92,72 @@ export default function FirstPersonController({
       if (disabled) {
         return;
       }
+      if (mobileControlsEnabled) {
+        return;
+      }
       if (doc.pointerLockElement !== canvas) {
         void canvas.requestPointerLock();
+      }
+    };
+
+    const onTouchStart = (event: TouchEvent) => {
+      if (disabled || !mobileControlsEnabled || lookTouchIdRef.current !== null) {
+        return;
+      }
+      const touch = event.changedTouches.item(0);
+      if (!touch) {
+        return;
+      }
+      lookTouchIdRef.current = touch.identifier;
+      lookTouchPointRef.current = { x: touch.clientX, y: touch.clientY };
+    };
+
+    const onTouchMove = (event: TouchEvent) => {
+      if (disabled || !mobileControlsEnabled) {
+        return;
+      }
+      const activeTouchId = lookTouchIdRef.current;
+      const previousPoint = lookTouchPointRef.current;
+      if (activeTouchId === null || !previousPoint) {
+        return;
+      }
+
+      let activeTouch: Touch | null = null;
+      for (let i = 0; i < event.changedTouches.length; i += 1) {
+        const candidate = event.changedTouches.item(i);
+        if (candidate && candidate.identifier === activeTouchId) {
+          activeTouch = candidate;
+          break;
+        }
+      }
+
+      if (!activeTouch) {
+        return;
+      }
+
+      const deltaX = activeTouch.clientX - previousPoint.x;
+      const deltaY = activeTouch.clientY - previousPoint.y;
+      lookTouchPointRef.current = { x: activeTouch.clientX, y: activeTouch.clientY };
+
+      const runtime = useRuntimeStore.getState();
+      const yaw = runtime.yaw - deltaX * mouseSensitivity;
+      const pitch = Math.min(1.45, Math.max(-1.45, runtime.pitch - deltaY * mouseSensitivity));
+      setRotation(yaw, pitch);
+      event.preventDefault();
+    };
+
+    const releaseTouchLook = (event: TouchEvent) => {
+      const activeTouchId = lookTouchIdRef.current;
+      if (activeTouchId === null) {
+        return;
+      }
+      for (let i = 0; i < event.changedTouches.length; i += 1) {
+        const candidate = event.changedTouches.item(i);
+        if (candidate && candidate.identifier === activeTouchId) {
+          lookTouchIdRef.current = null;
+          lookTouchPointRef.current = null;
+          return;
+        }
       }
     };
 
@@ -94,6 +166,10 @@ export default function FirstPersonController({
     doc.addEventListener("mousemove", onMouseMove);
     doc.addEventListener("pointerlockchange", onPointerLockChange);
     canvas.addEventListener("click", onCanvasClick);
+    canvas.addEventListener("touchstart", onTouchStart, { passive: true });
+    canvas.addEventListener("touchmove", onTouchMove, { passive: false });
+    canvas.addEventListener("touchend", releaseTouchLook);
+    canvas.addEventListener("touchcancel", releaseTouchLook);
 
     return () => {
       doc.removeEventListener("keydown", onKeyDown);
@@ -101,20 +177,25 @@ export default function FirstPersonController({
       doc.removeEventListener("mousemove", onMouseMove);
       doc.removeEventListener("pointerlockchange", onPointerLockChange);
       canvas.removeEventListener("click", onCanvasClick);
+      canvas.removeEventListener("touchstart", onTouchStart);
+      canvas.removeEventListener("touchmove", onTouchMove);
+      canvas.removeEventListener("touchend", releaseTouchLook);
+      canvas.removeEventListener("touchcancel", releaseTouchLook);
     };
-  }, [disabled, gl.domElement, mouseSensitivity, setPointerLocked, setRotation]);
+  }, [disabled, gl.domElement, mobileControlsEnabled, mouseSensitivity, setPointerLocked, setRotation]);
 
   useFrame((_, delta) => {
     const dt = Math.min(0.05, delta);
     const runtime = useRuntimeStore.getState();
     const { position, yaw, pitch, pointerLocked } = runtime;
+    const movementEnabled = pointerLocked || mobileControlsEnabled;
     const activeCamera = cameraRef.current;
 
     activeCamera.rotation.order = "YXZ";
     activeCamera.rotation.set(pitch, yaw, 0);
     activeCamera.position.set(position[0], eyeHeight, position[1]);
 
-    if (disabled || !pointerLocked) {
+    if (disabled || !movementEnabled) {
       setVelocity([0, 0]);
       if (dt > 0) {
         pushFps(1 / dt);
@@ -122,7 +203,9 @@ export default function FirstPersonController({
       return;
     }
 
-    const vertical = (keysRef.current.w ? 1 : 0) - (keysRef.current.s ? 1 : 0);
+    const keyboardVertical = (keysRef.current.w ? 1 : 0) - (keysRef.current.s ? 1 : 0);
+    const mobileVertical = (mobileForward ? 1 : 0) - (mobileBackward ? 1 : 0);
+    const vertical = Math.max(-1, Math.min(1, keyboardVertical + mobileVertical));
     const horizontal = (keysRef.current.d ? 1 : 0) - (keysRef.current.a ? 1 : 0);
 
     activeCamera.getWorldDirection(forward.current);

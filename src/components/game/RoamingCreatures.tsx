@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import {
   BoxGeometry,
@@ -22,6 +22,8 @@ interface RoamingCreaturesProps {
   colliders: CollisionBox[];
   playerPosition: [number, number];
   pointerLocked: boolean;
+  mobileControlsEnabled?: boolean;
+  mobileThrowSignal?: number;
   chunkSize: number;
   cellSize: number;
   disabled?: boolean;
@@ -153,6 +155,8 @@ export default function RoamingCreatures({
   colliders,
   playerPosition,
   pointerLocked,
+  mobileControlsEnabled = false,
+  mobileThrowSignal = 0,
   chunkSize,
   cellSize,
   disabled = false,
@@ -256,52 +260,63 @@ export default function RoamingCreatures({
     lastThrowAtRef.current = -999;
   }, [seed]);
 
+  const throwKeyboard = useCallback(() => {
+    if (disabled || (!pointerLocked && !mobileControlsEnabled)) {
+      return;
+    }
+
+    const now = performance.now() * 0.001;
+    if (now - lastThrowAtRef.current < KEYBOARD_THROW_COOLDOWN) {
+      return;
+    }
+    lastThrowAtRef.current = now;
+
+    const direction = throwDirectionRef.current;
+    camera.getWorldDirection(direction);
+    direction.normalize();
+
+    const id = `kbd:${projectileSeqRef.current}`;
+    projectileSeqRef.current += 1;
+    const spawnOffset = 0.6;
+    const spawnX = camera.position.x + direction.x * spawnOffset;
+    const spawnY = camera.position.y + direction.y * spawnOffset;
+    const spawnZ = camera.position.z + direction.z * spawnOffset;
+    const throwYaw = Math.atan2(direction.x, -direction.z);
+    projectilesRef.current.set(id, {
+      id,
+      x: spawnX,
+      y: spawnY,
+      z: spawnZ,
+      vx: direction.x * KEYBOARD_THROW_SPEED,
+      vy: direction.y * KEYBOARD_THROW_SPEED,
+      vz: direction.z * KEYBOARD_THROW_SPEED,
+      yaw: throwYaw,
+      spin: (Math.sin(throwYaw + now * 1.7) > 0 ? 1 : -1) * (6 + (projectileSeqRef.current % 5)),
+      expiresAt: now + KEYBOARD_PROJECTILE_LIFETIME,
+    });
+    projectileIdsRef.current = [...projectileIdsRef.current, id];
+  }, [camera, disabled, mobileControlsEnabled, pointerLocked]);
+
   useEffect(() => {
     const onMouseDown = (event: MouseEvent) => {
-      if (event.button !== 0) {
+      if (event.button !== 0 || !pointerLocked) {
         return;
       }
-      if (disabled || !pointerLocked) {
-        return;
-      }
-
-      const now = performance.now() * 0.001;
-      if (now - lastThrowAtRef.current < KEYBOARD_THROW_COOLDOWN) {
-        return;
-      }
-      lastThrowAtRef.current = now;
-
-      const direction = throwDirectionRef.current;
-      camera.getWorldDirection(direction);
-      direction.normalize();
-
-      const id = `kbd:${projectileSeqRef.current}`;
-      projectileSeqRef.current += 1;
-      const spawnOffset = 0.6;
-      const spawnX = camera.position.x + direction.x * spawnOffset;
-      const spawnY = camera.position.y + direction.y * spawnOffset;
-      const spawnZ = camera.position.z + direction.z * spawnOffset;
-      const throwYaw = Math.atan2(direction.x, -direction.z);
-      projectilesRef.current.set(id, {
-        id,
-        x: spawnX,
-        y: spawnY,
-        z: spawnZ,
-        vx: direction.x * KEYBOARD_THROW_SPEED,
-        vy: direction.y * KEYBOARD_THROW_SPEED,
-        vz: direction.z * KEYBOARD_THROW_SPEED,
-        yaw: throwYaw,
-        spin: (Math.sin(throwYaw + now * 1.7) > 0 ? 1 : -1) * (6 + (projectileSeqRef.current % 5)),
-        expiresAt: now + KEYBOARD_PROJECTILE_LIFETIME,
-      });
-      projectileIdsRef.current = [...projectileIdsRef.current, id];
+      throwKeyboard();
     };
 
     window.addEventListener("mousedown", onMouseDown);
     return () => {
       window.removeEventListener("mousedown", onMouseDown);
     };
-  }, [camera, disabled, pointerLocked]);
+  }, [pointerLocked, throwKeyboard]);
+
+  useEffect(() => {
+    if (!mobileControlsEnabled || mobileThrowSignal <= 0) {
+      return;
+    }
+    throwKeyboard();
+  }, [mobileControlsEnabled, mobileThrowSignal, throwKeyboard]);
 
   useEffect(() => {
     const runtimes = runtimesRef.current;

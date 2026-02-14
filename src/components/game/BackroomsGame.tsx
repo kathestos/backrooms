@@ -23,6 +23,10 @@ interface SceneProps {
   seed: string;
   graphics: GraphicsConfig;
   mouseSensitivityScalar: number;
+  mobileControlsEnabled: boolean;
+  mobileForward: boolean;
+  mobileBackward: boolean;
+  mobileThrowSignal: number;
   disableGameplay: boolean;
   onPlayerCaught: () => void;
 }
@@ -31,6 +35,10 @@ function Scene({
   seed,
   graphics,
   mouseSensitivityScalar,
+  mobileControlsEnabled,
+  mobileForward,
+  mobileBackward,
+  mobileThrowSignal,
   disableGameplay,
   onPlayerCaught,
 }: SceneProps) {
@@ -78,6 +86,9 @@ function Scene({
         colliders={stream.nearbyColliders}
         disabled={disableGameplay}
         eyeHeight={GAME_CONFIG.eyeHeight}
+        mobileBackward={mobileBackward}
+        mobileControlsEnabled={mobileControlsEnabled}
+        mobileForward={mobileForward}
         mouseSensitivity={GAME_CONFIG.mouseSensitivity * mouseSensitivityScalar}
         movementSpeed={GAME_CONFIG.playerSpeed}
         playerRadius={GAME_CONFIG.playerRadius}
@@ -89,6 +100,8 @@ function Scene({
         chunks={stream.activeChunks}
         colliders={creatureColliders}
         disabled={disableGameplay}
+        mobileControlsEnabled={mobileControlsEnabled}
+        mobileThrowSignal={mobileThrowSignal}
         onPlayerCaught={onPlayerCaught}
         playerPosition={position}
         pointerLocked={pointerLocked}
@@ -115,6 +128,10 @@ export default function BackroomsGame({ initialSeed }: BackroomsGameProps) {
   const [seed, setSeed] = useState(initialSeed);
   const [deathStartedAt, setDeathStartedAt] = useState<number | null>(null);
   const [deathProgress, setDeathProgress] = useState(0);
+  const [mobileControlsEnabled, setMobileControlsEnabled] = useState(false);
+  const [mobileForward, setMobileForward] = useState(false);
+  const [mobileBackward, setMobileBackward] = useState(false);
+  const [mobileThrowSignal, setMobileThrowSignal] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const runRef = useRef<{ runId: string | null; startMs: number }>({
@@ -136,10 +153,40 @@ export default function BackroomsGame({ initialSeed }: BackroomsGameProps) {
   const telemetryEnabled = useSettingsStore((state) => state.telemetryEnabled);
   const graphics = getGraphicsConfig(graphicsPreset);
   const isDead = deathStartedAt !== null;
+  const showDesktopOverlay = !mobileControlsEnabled && !pointerLocked && !isDead;
+  const effectiveMobileForward = mobileControlsEnabled && !isDead && mobileForward;
+  const effectiveMobileBackward = mobileControlsEnabled && !isDead && mobileBackward;
 
   useEffect(() => {
     resetRun([GAME_CONFIG.cellSize * 0.5, GAME_CONFIG.cellSize * 0.5]);
   }, [resetRun, seed]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const media = window.matchMedia("(pointer: coarse)");
+    const updateMobileControls = () => {
+      setMobileControlsEnabled(media.matches && window.innerWidth <= 1024);
+    };
+    updateMobileControls();
+
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", updateMobileControls);
+    } else {
+      media.addListener(updateMobileControls);
+    }
+    window.addEventListener("resize", updateMobileControls);
+    return () => {
+      if (typeof media.removeEventListener === "function") {
+        media.removeEventListener("change", updateMobileControls);
+      } else {
+        media.removeListener(updateMobileControls);
+      }
+      window.removeEventListener("resize", updateMobileControls);
+    };
+  }, []);
 
   const onPlayerCaught = useCallback(() => {
     setDeathStartedAt((current) => {
@@ -272,6 +319,8 @@ export default function BackroomsGame({ initialSeed }: BackroomsGameProps) {
     }
     setDeathStartedAt(null);
     setDeathProgress(0);
+    setMobileForward(false);
+    setMobileBackward(false);
     setSeed(createSessionSeed());
   };
 
@@ -285,6 +334,10 @@ export default function BackroomsGame({ initialSeed }: BackroomsGameProps) {
         <Scene
           disableGameplay={isDead}
           graphics={graphics}
+          mobileBackward={effectiveMobileBackward}
+          mobileControlsEnabled={mobileControlsEnabled}
+          mobileForward={effectiveMobileForward}
+          mobileThrowSignal={mobileThrowSignal}
           mouseSensitivityScalar={mouseSensitivity}
           onPlayerCaught={onPlayerCaught}
           seed={seed}
@@ -301,7 +354,7 @@ export default function BackroomsGame({ initialSeed }: BackroomsGameProps) {
         seed={seed}
       />
 
-      {!pointerLocked && !isDead && (
+      {showDesktopOverlay && (
         <div className="overlay-center">
           <div className="overlay-card">
             <h2>Backrooms Session</h2>
@@ -321,6 +374,50 @@ export default function BackroomsGame({ initialSeed }: BackroomsGameProps) {
               </Link>
             </div>
           </div>
+        </div>
+      )}
+
+      {mobileControlsEnabled && !isDead && (
+        <div className="mobile-controls">
+          <button
+            className={`mobile-control-button${effectiveMobileForward ? " active" : ""}`}
+            onContextMenu={(event) => event.preventDefault()}
+            onPointerCancel={() => setMobileForward(false)}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              setMobileForward(true);
+            }}
+            onPointerLeave={() => setMobileForward(false)}
+            onPointerUp={() => setMobileForward(false)}
+            type="button"
+          >
+            Walk
+          </button>
+          <button
+            className={`mobile-control-button${effectiveMobileBackward ? " active" : ""}`}
+            onContextMenu={(event) => event.preventDefault()}
+            onPointerCancel={() => setMobileBackward(false)}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              setMobileBackward(true);
+            }}
+            onPointerLeave={() => setMobileBackward(false)}
+            onPointerUp={() => setMobileBackward(false)}
+            type="button"
+          >
+            Back
+          </button>
+          <button
+            className="mobile-control-button throw"
+            onContextMenu={(event) => event.preventDefault()}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              setMobileThrowSignal((signal) => signal + 1);
+            }}
+            type="button"
+          >
+            Throw
+          </button>
         </div>
       )}
 

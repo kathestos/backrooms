@@ -128,6 +128,11 @@ a {
   background: #0b0d09;
   position: relative;
   overflow: hidden;
+  touch-action: none;
+}
+
+.play-root canvas {
+  touch-action: none;
 }
 
 .hud {
@@ -182,6 +187,44 @@ a {
   color: #d4cc99;
 }
 
+.mobile-controls {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 14px;
+  z-index: 13;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  pointer-events: none;
+}
+
+.mobile-control-button {
+  pointer-events: auto;
+  min-height: 52px;
+  border-radius: 12px;
+  border: 1px solid rgb(93 98 66 / 95%);
+  background: linear-gradient(180deg, rgb(54 60 37 / 90%) 0%, rgb(32 35 23 / 92%) 100%);
+  color: #f8f4d5;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.82rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.mobile-control-button.active {
+  border-color: #d4c46d;
+  background: linear-gradient(180deg, rgb(84 90 57 / 95%) 0%, rgb(47 52 33 / 95%) 100%);
+}
+
+.mobile-control-button.throw {
+  background: linear-gradient(180deg, rgb(67 44 34 / 92%) 0%, rgb(42 28 20 / 95%) 100%);
+  border-color: rgb(158 114 84 / 95%);
+}
+
 .settings-grid {
   display: grid;
   gap: 16px;
@@ -226,5 +269,17 @@ input[type="range"] {
     left: 8px;
     font-size: 11px;
     padding: 8px;
+  }
+
+  .mobile-controls {
+    bottom: 10px;
+    left: 8px;
+    right: 8px;
+    gap: 8px;
+  }
+
+  .mobile-control-button {
+    min-height: 46px;
+    font-size: 0.75rem;
   }
 }
